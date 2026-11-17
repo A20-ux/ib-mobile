@@ -1,4 +1,4 @@
-/* IB 桌面 APP · 聊天外观 v1.1.0 —— 接管 #cv-msgs 整套聊天气泡外观 + 时间分隔节奏。
+/* IB 桌面 APP · 聊天外观 v1.2.0 —— 接管 #cv-msgs 整套聊天气泡外观 + 时间分隔节奏。
    做三件事（脚本加载即生效，不随面板开关，面板只负责调参数）：
      1) 注入一套磨砂玻璃气泡皮肤（背景 / 模糊 / 圆角 / 内距 / 最大宽度 / 字号 / 头像 / 右上角装饰点）；
      2) 接管 _tmCollapse：时间标签只在「间隔超过 N 分钟」或换人说话时才出现，不是每条都挂；
@@ -82,7 +82,11 @@
     var css='';
     css+='#cv-msgs{gap:'+S.gap+'px}';
     css+='#cv-msgs .mrow{margin-bottom:'+Math.max(0,S.gap-7)+'px}';
-    css+='#cv-msgs .m{position:relative;max-width:'+S.maxw+'%!important;'
+    /* 宽度挂在 .m-col 上：.m 的 max-width 用百分比会以「已收缩的父列」为基准，
+       结果自己把自己勒细（短句被迫竖排）。改成列限宽、气泡吃满列宽。 */
+    css+='#cv-msgs .m-body .m-col{max-width:min('+S.maxw+'%,calc(100% - 46px))!important}';
+    css+='#cv-msgs .m-body>.m{max-width:min('+S.maxw+'%,calc(100% - 46px))!important}';
+    css+='#cv-msgs .m{position:relative;max-width:100%!important;'
       +'padding:'+S.padY+'px '+S.padX+'px!important;'
       +'border-radius:'+S.round+'px!important;'
       +'font-size:'+S.fs+'rem!important;line-height:'+S.lh+'!important;'
@@ -118,27 +122,58 @@
     if(!st){st=document.createElement('style');st.id='clab-css';document.head.appendChild(st)}
     st.textContent=S.on?buildCSS():'';
     /* 让时间按新间隔重算一遍 */
-    try{var all=typeof _tmCollapseAll==='function'?_tmCollapseAll:null;if(all)all()}catch(e){}
+    runCollapse();
     try{paintPreview()}catch(e){}
   }
 
   /* ── 接管时间折叠 ── */
+  function _mmOf(txt){
+    var m=/(\d{1,2}):(\d{2})/.exec(String(txt||''));if(!m)return 0;
+    return (parseInt(m[1],10)||0)*60+(parseInt(m[2],10)||0);
+  }
+  function _stampOf(row){
+    var v=+row.dataset.ts||0;
+    if(v)return v;
+    var t=row.querySelector('.m-time');if(!t)return 0;
+    var mm=_mmOf(t.textContent);return mm?mm*60000:0;/* 没有时间戳就退回读文本的 HH:MM */
+  }
+  /* 一个「时间块」只显示一次：与上一条间隔 < N 分钟就藏起来（显示在块首），不分左右 */
   function myCollapse(hostEl){
     try{
       var rows=[].slice.call(hostEl.querySelectorAll(':scope > .mrow'));
       function side(r){return r.querySelector('.m.user')?'u':(r.querySelector('.m.ai')?'a':'')}
-      var gapMs=(Number(S.timeGap)||10)*60000;
+      var gapMs=(Number(S.timeGap)||10)*60000, prev=null;
       for(var i=0;i<rows.length;i++){
         var t=rows[i].querySelector('.m-time');if(!t)continue;
-        var nx=rows[i+1],hide=false;
+        var s=side(rows[i]), ts=_stampOf(rows[i]), hide=false;
         if(!S.timeOn){hide=true}
-        else if(nx&&!nx.classList.contains('mpx-solo')&&nx.querySelector('.m-time')&&side(rows[i])&&side(nx)===side(rows[i])){
-          var a=+rows[i].dataset.ts||0,b=+nx.dataset.ts||0;
-          if(a&&b&&b>=a&&(b-a)<gapMs)hide=true;
+        else if(prev&&prev.ts&&ts){
+          var d=ts-prev.ts;if(d<0)d+=86400000;/* 跨零点 */
+          if(d<gapMs)hide=true;
         }
-        if(hide&&t.querySelector('.m-gb.hit'))hide=false;
+        if(hide&&t.querySelector('.m-gb.hit'))hide=false;/* 这轮想起过的时间行不折 */
         t.classList.toggle('tm-hide',hide);
+        prev={side:s,ts:ts};
       }
+    }catch(e){}
+  }
+  function runCollapse(){
+    try{
+      var h=typeof convEl==='function'?convEl('cv-msgs'):document.getElementById('cv-msgs');
+      if(h)myCollapse(h);
+    }catch(e){}
+  }
+  /* 任何重渲染（新消息 / 翻页 / 切会话）都会重建行，用观察者兜住，保证时间始终按新规则 */
+  var _obsT=0;
+  function watch(){
+    try{
+      var h=document.getElementById('cv-msgs');if(!h){setTimeout(watch,500);return}
+      if(h._clabObs)return;
+      h._clabObs=1;
+      var mo=new MutationObserver(function(){
+        clearTimeout(_obsT);_obsT=setTimeout(function(){runCollapse()},180);
+      });
+      mo.observe(h,{childList:true,subtree:true});
     }catch(e){}
   }
   function install(){
@@ -150,6 +185,7 @@
       }
     }catch(e){}
     A.installed=true;
+    watch();
   }
 
   /* ── 预览 ── */
@@ -314,11 +350,13 @@
     await load();
     install();
     paint();
-    try{var all=typeof _tmCollapseAll==='function'?_tmCollapseAll:null;if(all)all()}catch(e){}
+    runCollapse();
+    setTimeout(runCollapse,600);
+    setTimeout(runCollapse,2000);
   })();
 
   IBApps.register({
-    id:'chatlab',name:'聊天外观',version:'1.1.0',sdk:2,wall:true,
+    id:'chatlab',name:'聊天外观',version:'1.2.0',sdk:2,wall:true,
     icon:'<path d="M4 12a8 8 0 1 1 3.2 6.4L4 20l1.3-3.4A7.9 7.9 0 0 1 4 12z"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01"/>',
     mount:async function(h,c){
       host=h;ctx=c;css();host.style.padding='0';
