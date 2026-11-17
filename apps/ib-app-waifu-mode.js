@@ -1,4 +1,4 @@
-/* IB 桌面 APP · Waifu 模式 v1.5.0 —— 拟真聊天分句拆泡 + 合并发送（全局常驻）。
+/* IB 桌面 APP · Waifu 模式 v1.6.0 —— 拟真聊天分句拆泡 + 合并发送（全局常驻）。
    分泡规则（v1.4.0 重写，对齐真人聊天的节奏）：
      · 一行（换行）＝一个气泡；行内不再按空格碎切；
      · 单行超过「最长」就在句号 / 问号 / 感叹号 / 分号处贪心切块，每块不超过最长；
@@ -14,9 +14,9 @@
 (function(){
   if(!window.IBApps)return;
   var host=null,ctx=null;
-  var S={enabled:true,bindCfgId:'',mergeOn:false,mergeGap:5000,typeMs:250,stripPunct:false,minLen:2,maxLen:60,prompt:''};
+  var S={enabled:true,bindCfgId:'',mergeOn:false,mergeGap:5000,typeMs:250,stripPunct:false,minLen:0,maxLen:60,prompt:''};
   var cfgList=[];
-  var H={installed:false,origSend:null,origEmit:null,origSave:null,timers:[],mergeBuf:[],mergeTimer:null,lastSplit:0};
+  var H={installed:false,origSend:null,origEmit:null,origSave:null,origDraw:null,timers:[],mergeBuf:[],mergeTimer:null,lastSplit:0};
 
   function esc(t){return String(t==null?'':t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
   function q(sel){return host?host.querySelector(sel):null}
@@ -61,7 +61,7 @@
     try{await dbPut('apiSettings',{id:_key(),app:'waifumode',key:'cfg',v:v,updated:Date.now()})}catch(e){}
   }
   async function load(){
-    try{var v=await storageGet();if(v&&typeof v==='object'){S=Object.assign(S,v);if(v.mig!==15){S.enabled=true;S.mig=15;try{await storageSet(S)}catch(e){}}}}catch(e){}
+    try{var v=await storageGet();if(v&&typeof v==='object'){S=Object.assign(S,v);if(v.mig!==16){S.enabled=true;S.minLen=0;S.mig=16;try{await storageSet(S)}catch(e){}}}}catch(e){}
     S.mergeGap=Math.min(15000,Math.max(1000,Number(S.mergeGap)||5000));
     S.typeMs=Math.min(800,Math.max(50,Number(S.typeMs)||250));
     S.minLen=Math.min(60,Math.max(0,Number(S.minLen)||0));
@@ -88,20 +88,22 @@
     var lines=raw.split(/\n+/).map(function(x){return x.trim()}).filter(function(x){return x.length>0});
     var segs=[];
     lines.forEach(function(line){
-      /* 一句一泡：先把一行按句末标点切句；只有「没有句末标点」的残句才可能并回去 */
+      /* 一句一泡：先把一行按句末标点切句；换行是硬边界，下一行的短句绝不并回上一行 */
       var parts=line.match(/[^。！？!?；;]+[。！？!?；;]*|[。！？!?；;]+/g)||[line];
+      var first=true;
       parts.forEach(function(p){
         p=String(p||'').trim();if(!p)return;
-        segs.push({t:p,end:/[。！？!?；;]$/.test(p)});
+        segs.push({t:p,end:/[。！？!?；;]$/.test(p),nl:first});
+        first=false;
       });
     });
 
-    /* 残句（没有句末标点且太短）并进前一个；整句一律独占一个气泡 */
+    /* 只有「同一行里被切出来的残句」才允许并回同行的前一句；整句、换行后的句子一律独占气泡 */
     var out=[];
     segs.forEach(function(o){
       var s=o.t;if(!s)return;
       var prev=out.length?out[out.length-1]:null;
-      var tiny=!o.end&&s.replace(/[\s，,、…~～]/g,'').length<=minLen;
+      var tiny=!o.nl&&!o.end&&s.replace(/[\s，,、…~～]/g,'').length<=minLen;
       if(prev!=null&&tiny&&(prev+s).length<=maxLen){out[out.length-1]=prev+s;return}
       if(!s.replace(/[\s，,、…~～。！？!?；;]/g,'').length)return;/* 整泡只有标点：丢掉，不生成空气泡 */
       out.push(s);
@@ -137,9 +139,8 @@
   function matchCfg(){
     var c=_refCfg();
     if(!c)return false;
-    if(c._group)return false;
-    if(!S.bindCfgId)return true;
-    return c.id===S.bindCfgId;
+    if(c._group)return false;/* 群聊不拆：成员轮流说话，拆了会以为是同一人连发 */
+    return true;/* v1.6.0：拆泡对所有 1对1 生效；「绑定角色卡」只管提示词注入的范围，不再拦分泡 */
   }
   function splittable(am){
     if(!am||am.role!=='assistant')return false;
@@ -264,6 +265,13 @@
         };
       }
     }catch(e){}
+    /* v1.6.0：每次会话重绘后，把尾部还没拆的旧回复补拆（一句一泡对历史消息也成立） */
+    try{
+      if(typeof drawConv==='function'&&!H.origDraw){
+        H.origDraw=drawConv;
+        drawConv=function(){var r=H.origDraw.apply(this,arguments);try{sweepSoon()}catch(e){}return r};
+      }
+    }catch(e){}
     /* v1.5.0：底座在每条 TA 回复落库后无条件回调一次（不依赖桌面 APP 是否打开） */
     try{
       window._ibAfterAiMsg=function(am){try{if(S.enabled)splitHook(am)}catch(e){}};
@@ -340,7 +348,7 @@
 
       +'<div class="wm-card"><div class="wm-row"><div class="wm-mid"><div class="wm-t">启用Waifu模式</div><div class="wm-d">AI 回复按段落 / 句号分成多个气泡</div></div><div class="wm-sw" id="wm-enabled" data-k="enabled"></div></div></div>'
 
-      +'<div class="wm-card"><div class="wm-t">气泡长短</div><div class="wm-d">一行＝一个气泡。短于「最短」的并回前一句，长于「最长」的在句号处切开。</div>'
+      +'<div class="wm-card"><div class="wm-t">气泡长短</div><div class="wm-d">换行＝一个气泡，行内再按 。！？ 切句，一句一个气泡。只有「同一行里被切出来的残句」才会并回同行的前一句。</div>'
       +'<div class="wm-slider"><div class="wm-val" id="wm-min-val">最短：'+S.minLen+' 字（比这更短就并回前一句）</div>'
       +'<input type="range" id="wm-min" min="0" max="40" step="2" value="'+S.minLen+'"><div class="wm-scale"><span>不合并</span><span>40字</span></div></div>'
       +'<div class="wm-slider"><div class="wm-val" id="wm-max-val">最长：'+S.maxLen+' 字（超过就在句号处切开）</div>'
@@ -365,6 +373,9 @@
       +'<div class="wm-card"><div class="wm-t">分句预览</div><div class="wm-d">粘一段 AI 回复，实时看会拆成几个气泡（跟着上面两个滑杆走）。</div>'
       +'<div class="wm-field"><textarea id="wm-prev-src" placeholder="粘贴一段回复…"></textarea></div>'
       +'<div class="wm-prev" id="wm-prev-out"></div></div>'
+
+      +'<div class="wm-card"><div class="wm-t">把这段对话重新拆一遍</div><div class="wm-d">已经存在的旧回复还是原来那样（一条一大段）。点一下，按现在的规则把它们也拆成一句一个气泡。</div>'
+      +'<button type="button" class="ov2-btn" id="wm-resort" style="margin-top:10px">重排这段对话</button></div>'
 
       +'<div class="wm-status" id="wm-status">'+statusHTML()+'</div>'
       +'</div>';
@@ -393,6 +404,7 @@
     q('#wm-prompt').addEventListener('input',function(){S.prompt=this.value;save();applySys()});
     q('#wm-bind').addEventListener('click',bindPicker);
     q('#wm-prev-src').addEventListener('input',paintPrev);
+    var rs=q('#wm-resort');if(rs)rs.addEventListener('click',function(){try{resort()}catch(e){toast('重排失败：'+(e&&e.message||e))}});
     paintPrev();
   }
 
@@ -406,6 +418,64 @@
     var n=parseInt(String(raw).trim(),10);
     if(isNaN(n)||n<1||n>opts.length){S.bindCfgId=''}else{S.bindCfgId=opts[n-1].id}
     save();applySys();render();toast(S.bindCfgId?'已绑定角色卡':'已解除绑定');
+  }
+
+  /* 按范围把「一条一大段」的旧回复拆成多个气泡；返回拆了几条、新增几泡 */
+  async function splitRange(from,to){
+    try{var ac9=_refCfg();if(ac9&&ac9._group)return null}catch(e){}/* 群聊不拆 */
+    var msgs=_refMsgs();if(!msgs)return null;
+    var put=_fnDbPut();if(!put)return null;
+    var n=0,added=0,i=Math.max(0,from||0),end=Math.min(msgs.length,to||msgs.length);
+    for(i=Math.max(0,from||0);i<end;i++){
+      var m=msgs[i];
+      if(!m||m.role!=='assistant'||m._wmSplit)continue;
+      try{if(!splittable(m))continue}catch(e){continue}
+      var c=String(m.content||'');
+      if(!/\n/.test(c)&&!/[。！？!?]\s*[^。！？!?]/.test(c))continue;
+      var list=splitBubbles(c,{strip:S.stripPunct,minLen:S.minLen,maxLen:S.maxLen});
+      if(list.length<=1)continue;
+      var t0=Number(m.timestamp)||Date.now();
+      m.content=list[0];m._wmSplit=true;
+      try{await put('chatMessages',m)}catch(e){}
+      for(var k=1;k<list.length;k++){
+        var cp=Object.assign({},m);
+        cp.id='msg_'+Date.now()+'_'+Math.floor(Math.random()*100000)+k;
+        cp.content=list[k];cp.timestamp=t0+k;cp._wmSplit=true;
+        ['thinking','usage','blogReads','wsSearches','memHit','ctxSnap','truncated','voice','images','files','sticker','link','mapRun','wsResults'].forEach(function(x){delete cp[x]});
+        try{await put('chatMessages',cp)}catch(e){}
+        msgs.splice(i+k,0,cp);added++;
+      }
+      n++;i=i+list.length-1;end+=list.length-1;
+    }
+    return {n:n,added:added};
+  }
+
+  async function resort(){
+    var msgs=_refMsgs(),ac=_refCfg();
+    if(!msgs||!ac){toast('先打开一段对话');return}
+    var r=await splitRange(0,msgs.length);
+    if(!r){toast('数据库还没准备好，稍等几秒');return}
+    if(!r.n){toast('这段对话里没有需要拆的');return}
+    try{var d=typeof drawConv==='function'?drawConv:null;if(d)d()}catch(e){}
+    toast('重排了 '+r.n+' 条，新增 '+r.added+' 个气泡');
+  }
+
+  /* 打开会话时，自动把「最近 60 条」里还没拆的 AI 回复补拆一次：用户不用手动点也能看到效果 */
+  var _sweepT=0,_sweepBusy=false;
+  function sweepSoon(){
+    if(!S.enabled||_sweepBusy)return;
+    clearTimeout(_sweepT);
+    _sweepT=setTimeout(async function(){
+      if(_sweepBusy||!S.enabled)return;
+      _sweepBusy=true;
+      try{
+        var msgs=_refMsgs();
+        if(msgs&&msgs.length){
+          var r=await splitRange(Math.max(0,msgs.length-60),msgs.length);
+          if(r&&r.n){try{var o=H.origDraw;if(o)o()}catch(e){}}
+        }
+      }catch(e){}finally{_sweepBusy=false}
+    },220);
   }
 
   function paintPrev(){
@@ -432,7 +502,7 @@
   })();
 
   IBApps.register({
-    id:'waifumode',name:'Waifu模式',version:'1.5.0',sdk:2,wall:true,
+    id:'waifumode',name:'Waifu模式',version:'1.6.0',sdk:2,wall:true,
     icon:'<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.38 8.38 0 0 1 8 8z"/><path d="M8 11h.01M12 11h.01M16 11h.01"/>',
     mount:async function(h,c){
       host=h;ctx=c;css();host.style.padding='0';host.style.overflow='hidden';
