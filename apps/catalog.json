@@ -66,6 +66,14 @@
       "file": "ib-app-toolgate.js",
       "desc": "宿主与设备工具按需开关：16 项能力逐条授权，标出哪些网页能真做、哪些要真机或网关，对外暴露 IBToolGate 供别的模块先查再用",
       "icon": "<rect x=\"4\" y=\"4\" width=\"16\" height=\"16\" rx=\"4\"/><path d=\"M8 12h8M12 8v8\"/>"
+    },
+    {
+      "id": "mover",
+      "name": "搬家导入",
+      "version": "1.0.0",
+      "file": "ib-app-mover.js",
+      "desc": "从别的 app 搬过来：记忆库 JSON / 纯文本 / Markdown / 历史聊天 JSON 都认，同名并入、已有不重复、一类最多 10 件，可按 TA 绑定",
+      "icon": "<path d=\"M4 8.5h16M4 8.5v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9\"/><path d=\"M9.5 8.5V6.2A1.7 1.7 0 0 1 11.2 4.5h1.6A1.7 1.7 0 0 1 14.5 6.2v2.3\"/><path d=\"M12 12v5M9.5 14.5L12 12l2.5 2.5\"/>"
     }
   ]
 }
