@@ -39627,7 +39627,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 <script id="ib-chatimport-pack">
 (function(){
 'use strict';
-var HK='ib_ci_hist',CAP=120000,TCAP=30000,SRC={chatgpt:'ChatGPT',claude:'Claude',deepseek:'DeepSeek',json:'JSON',txt:'文本'};
+var HK='ib_ci_hist',CAP=120000,TCAP=30000,SRC={chatgpt:'ChatGPT',claude:'Claude',deepseek:'DeepSeek',kelivo:'Kelivo',operit:'Operit',risu:'Risu',sillytavern:'SillyTavern',nextchat:'NextChat',lobechat:'LobeChat',chatbox:'Chatbox',janitor:'JanitorAI',cai:'Character.AI',cherry:'Cherry Studio',other:'其它应用 JSON',json:'JSON',txt:'文本'};
 function $(id){return document.getElementById(id)}
 function E(x){return String(x==null?'':x).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function T(x){try{toast(x)}catch(e){}}
@@ -39730,13 +39730,13 @@ function parseDS(arr){var out=[];arr.forEach(function(cv,ci){if(!cv)return;var s
 /* ── 其它 JSON / JSONL：找消息数组 + 猜字段（字段可写 a.b 路径） ── */
 var KC=['content','text','mes','message','body','msg','value','content.text','content.parts','message.content','message.text','data.content','data.text'];
 var KR=['role','sender','author.role','is_user','isUser','fromMe','from_me','is_me','from','speaker','author','name','user'];
-var KT=['timestamp','create_time','created_at','createdAt','send_date','time','date','ts','created','sent_at','sentAt','datetime','updated_at'];
+var KT=['timestamp','create_time','created_at','createdAt','createTime','send_date','time','date','ts','created','sent_at','sentAt','sentTime','datetime','updated_at','inserted_at','messageTime','mtime'];
 function gp(o,p){if(!o||!p)return undefined;var a=String(p).split('.');for(var i=0;i<a.length;i++){if(o==null||typeof o!=='object')return undefined;o=o[a[i]]}return o}
 function txtOf(v){if(v==null)return '';if(typeof v==='string')return v;if(typeof v==='number')return String(v);
   if(Array.isArray(v))return v.map(function(p){if(typeof p==='string')return p;if(p&&typeof p==='object'){var ty=String(p.type||p.content_type||'');if(/image/.test(ty)||p.image_url||p.asset_pointer)return '［图片］';if(typeof p.text==='string')return p.text;if(typeof p.content==='string')return p.content}return ''}).filter(function(x){return x&&String(x).trim()}).join('\n\n');
   if(typeof v==='object'){if(typeof v.text==='string')return v.text;if(typeof v.content==='string')return v.content;if(Array.isArray(v.parts))return txtOf(v.parts)}return ''}
 function guess(objs,keys,kind){var best='',bn=0;keys.forEach(function(k){var n=0;objs.forEach(function(o){var v=gp(o,k);if(kind==='c'){if(txtOf(v).trim())n++}else if(kind==='r'){if(typeof v==='boolean'||(typeof v==='string'&&v.trim()&&v.length<=40))n++}else if(toMs(v))n++});if(n>bn){bn=n;best=k}});return bn>=Math.max(1,Math.ceil(objs.length*0.5))?best:''}
-function findArrays(root){var strong=[],weak=[];(function walk(v,d,par){if(d>7||strong.length+weak.length>=3000)return;
+function findArrays(root){var strong=[],weak=[];(function walk(v,d,par){if(d>10||strong.length+weak.length>=12000)return;
     if(Array.isArray(v)){var objs=v.filter(function(x){return x&&typeof x==='object'&&!Array.isArray(x)});if(objs.length&&objs.length>=v.length*0.6&&guess(objs,KC,'c')){if(guess(objs,KR,'r')){strong.push({arr:objs,par:par});return}weak.push({arr:objs,par:par})}v.forEach(function(x){walk(x,d+1,null)})}
     else if(v&&typeof v==='object')Object.keys(v).forEach(function(k){walk(v[k],d+1,v)})})(root,0,null);return strong.length?strong:weak}
 function userVal(objs,rk){var vals={};objs.forEach(function(o){var v=gp(o,rk);if(typeof v==='boolean')vals[String(v)]=(vals[String(v)]||0)+1;else if(typeof v==='string'&&v.trim()){var s=v.trim().toLowerCase();vals[s]=(vals[s]||0)+1}});
@@ -39744,7 +39744,7 @@ function userVal(objs,rk){var vals={};objs.forEach(function(o){var v=gp(o,rk);if
   var f=objs.map(function(o){return gp(o,rk)}).filter(function(v){return typeof v==='string'&&v.trim()})[0];return f?String(f).trim().toLowerCase():'user'}
 function roleOf(o,v,uv){if(o&&o.is_system===true)return '';if(typeof v==='boolean')return String(v)===uv?'user':'assistant';var s=String(v==null?'':v).trim().toLowerCase();if(!s)return '';if(s===uv)return 'user';if(/^(system|tool|function|developer)$/.test(s))return '';return 'assistant'}
 function parseGeneric(root,ov,fname){var arrs=findArrays(root);if(!arrs.length)return {convs:[],map:{r:'',c:'',t:'',u:''}};
-  var all=[];arrs.forEach(function(a){all=all.concat(a.arr.slice(0,200))});ov=ov||{};
+  var all=[];arrs.forEach(function(a){all=all.concat(a.arr)});ov=ov||{};/* v1.4：不再截断 200 条，整段都认 */
   var map={c:ov.c||guess(all,KC,'c'),r:ov.r||guess(all,KR,'r'),t:ov.t!=null&&ov.t!==undefined&&ov.hasOwnProperty('t')?ov.t:guess(all,KT,'t')};map.u=String(ov.u||userVal(all,map.r)).trim().toLowerCase();
   var out=[];arrs.forEach(function(a,ai){var par=a.par||{},o0=a.arr[0]||{};var nm0=String(par.title||par.name||par.subject||par.topic||par.chat_name||(o0.character_name?('与 '+o0.character_name+' 的对话'):'')||'').trim();var title=nm0||((fname||'导入的对话')+(arrs.length>1?' · '+(ai+1):''));
     var msgs=[];a.arr.forEach(function(o,i){var role=roleOf(o,gp(o,map.r),map.u),t=txtOf(gp(o,map.c)).trim();if(!role||!t)return;msgs.push({role:role,text:t,ts:map.t?toMs(gp(o,map.t)):0,i:i})});
@@ -39777,9 +39777,31 @@ function fixTimes(convs,now){var k=0;convs.forEach(function(cv){var ms=cv.msgs,n
     if(first<0){ms.forEach(function(m,i){m.ts=now-(ms.length-i)*60000-(k++)});nd=ms.length}
     else{for(var j=first-1;j>=0;j--){ms[j].ts=ms[j+1].ts-1000;nd++}for(var q=first+1;q<ms.length;q++){if(!(ms[q].ts>0)){ms[q].ts=ms[q-1].ts+1000;nd++}else if(ms[q].ts<=ms[q-1].ts)ms[q].ts=ms[q-1].ts+1}}
     cv.nd=nd;cv.t0=ms[0].ts;cv.t1=ms[ms.length-1].ts;cv.nu=ms.filter(function(m){return m.role==='user'}).length;cv.nth=ms.filter(function(m){return m.think}).length})}
+/* 认出是哪个 app 导出的：只看根对象的元信息与键名，猜不出就记「其它应用」 */
+function appOf(r){try{
+  if(!r||Array.isArray(r))return '';
+  var meta=[r.app,r.source,r.appName,r.application,r.exportedFrom,r.export_source,r.exportSource,r.client,r.platform,r.format,r.version,r.generator].filter(function(x){return typeof x==='string'}).join('|');
+  var keys=Object.keys(r).join('|');
+  var blob=(meta+'|'+keys).toLowerCase();
+  var T=[['kelivo','kelivo'],['operit','operit'],['risu','risu'],['sillytavern','sillytavern'],['nextchat','nextchat'],['lobechat','lobechat'],['chatbox','chatbox'],['janitor','janitor'],['character.ai','cai'],['cherry','cherry']];
+  for(var i=0;i<T.length;i++)if(blob.indexOf(T[i][0])>=0)return T[i][1];
+  return 'other';
+}catch(e){return ''}}
 function parseText(text,name,ov,root){var r=root;if(r===undefined){try{r=parseJ(text)}catch(e){if(!String(text||'').trim())throw e;var tt=parseChatText(text,ov,name);return {src:'txt',convs:tt.convs,map:null,tmap:tt.tmap,root:null}}}/* 不是 JSON 就按逐行文本读；认不出双方名字也留在文本模式，让用户在「对话格式与时间」里手填 */var src='json',convs=[],map=null;
-  if(r&&!Array.isArray(r)&&typeof r==='object'){if(dsList(r)||(r.mapping&&typeof r.mapping==='object'))r=[r];else if(Array.isArray(r.chat_messages))r=[r];else if(Array.isArray(r.conversations))r=r.conversations}
-  if(isDS(r)){src='deepseek';convs=parseDS(r)}else if(isGPT(r)){src='chatgpt';convs=parseGPT(r)}else if(isClaude(r)){src='claude';convs=parseClaude(r)}else{var g=parseGeneric(r,ov,String(name||'').replace(/^.*\//,'').replace(/\.(jsonl?|zip|txt)$/i,''));convs=g.convs;map=g.map}
+  if(r&&!Array.isArray(r)&&typeof r==='object'){if(dsList(r)||(r.mapping&&typeof r.mapping==='object'))r=[r];else if(Array.isArray(r.chat_messages))r=[r];
+    else{var WK=['conversations','chats','sessions','dialogs','histories','history','topics','records','threads','chatList','conversationList','data','list','items','result','rows'];
+      var _isCv=function(x){return x&&typeof x==='object'&&(Array.isArray(x.messages)||Array.isArray(x.msgs)||Array.isArray(x.chat_messages)||Array.isArray(x.history)||(x.mapping&&typeof x.mapping==='object'))};
+      var _isMsg=function(x){return x&&typeof x==='object'&&(x.role||x.sender)};
+      for(var wi=0;wi<WK.length;wi++){
+        var wv=r[WK[wi]];
+        if(Array.isArray(wv)&&wv.length&&wv.some(_isCv)){r=wv;break}
+        if(Array.isArray(wv)&&wv.length&&wv.some(_isMsg)){r=wv;break}
+        if(wv&&!Array.isArray(wv)&&typeof wv==='object'){
+          var inner=WK.map(function(k){return wv[k]}).filter(function(x){return Array.isArray(x)&&x.length})[0];
+          if(inner&&(inner.some(_isCv)||inner.some(_isMsg))){r=inner;break}
+        }
+      }}}
+    if(isDS(r)){src='deepseek';convs=parseDS(r)}else if(isGPT(r)){src='chatgpt';convs=parseGPT(r)}else if(isClaude(r)){src='claude';convs=parseClaude(r)}else{var g=parseGeneric(r,ov,String(name||'').replace(/^.*\//,'').replace(/\.(jsonl?|zip|txt)$/i,''));convs=g.convs;map=g.map;var _an=appOf(r);if(convs.length&&_an)src=_an}
   fixTimes(convs,Date.now());return {src:src,convs:convs,map:map,root:src==='deepseek'?null:r}}/* DeepSeek 不走「字段对应」，原始对象不留着占内存 */
 
 /* ── 落库 ── */
@@ -39835,11 +39857,11 @@ function css(){if($('ib-ci-css'))return;var st=document.createElement('style');s
 var S=null;
 function open(){css();var old=$('ib-ci-ov');if(old)old.remove();S={convs:[],sel:{},src:'',file:'',root:null,map:null,busy:false,mode:'auto',think:true};
   var ov=document.createElement('div');ov.id='ib-ci-ov';ov.className='ib-ov2';try{document.body.classList.add('ci-on');var _cimo=new MutationObserver(function(){if(!document.getElementById('ib-ci-ov')){document.body.classList.remove('ci-on');_cimo.disconnect()}});_cimo.observe(document.body,{childList:true})}catch(e){}/* 手机端 v726：这页开着时底下那一页先藏起来（body.ci-on），页一撤就还原 */
-  ov.innerHTML='<div class="ov2-head"><div class="ov2-tt">导入聊天记录<small>ChatGPT / Claude / DeepSeek 官方导出 · 其它 JSON · 全程本机</small></div><button class="ov2-x" data-a="x" aria-label="关闭">✕</button></div>'
+  ov.innerHTML='<div class="ov2-head"><div class="ov2-tt">导入聊天记录<small>ChatGPT / Claude / DeepSeek / Kelivo / Operit 及任何 JSON · 全部导入 · 全程本机</small></div><button class="ov2-x" data-a="x" aria-label="关闭">✕</button></div>'
    +'<div class="ov2-body">'
    +'<div class="ov2-lab">选文件</div><div class="ov2-card"><button class="ov2-btn pri ci-w" data-a="pick">选择导出文件</button><input type="file" id="ci-file" accept=".json,.jsonl,.zip,.txt,.md,application/json,application/zip,text/plain,text/markdown" hidden>'
    +'<div class="ci-st" id="ci-st"></div>'
-   +'<div class="ov2-hint">ChatGPT：设置 → 数据控制 → 导出数据，邮件里下载的压缩包；Claude：Settings → Privacy → Export data；DeepSeek：设置 → 数据管理 → 导出所有历史对话。压缩包可以直接选，也可以先解压再选里面的 JSON 文件。别的应用导出的 JSON / JSONL（如 Operit）也能读，读完在「字段对应」里核对；自己记的「用户：…」「AI：…」逐行文本（.txt）也能读，时间按你填的日期范围排。</div></div>'
+   +'<div class="ov2-hint">ChatGPT：设置 → 数据控制 → 导出数据，邮件里下载的压缩包；Claude：Settings → Privacy → Export data；DeepSeek：设置 → 数据管理 → 导出所有历史对话。压缩包可以直接选，也可以先解压再选里面的 JSON 文件。Kelivo、Operit、Risu、SillyTavern、NextChat、LobeChat 之类导出的 JSON / JSONL 一律能读，整份有多少段会话、多少条消息就导多少，不截断也不分批限制；认不准字段时在「字段对应」里指一下再重读；自己记的「用户：…」「AI：…」逐行文本（.txt）也能读，时间按你填的日期范围排。</div></div>'
    +'<div id="ci-map" hidden><div class="ov2-lab">字段对应<small>别的应用导出的记录</small></div><div class="ov2-card">'
    +'<div class="ci-f"><label>角色字段</label><input class="ov2-in" id="ci-kr" autocomplete="off" spellcheck="false"></div>'
    +'<div class="ci-f"><label>内容字段</label><input class="ov2-in" id="ci-kc" autocomplete="off" spellcheck="false"></div>'

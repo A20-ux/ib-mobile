@@ -1,4 +1,4 @@
-/* IB 桌面 APP · 聊天外观 v1.2.0 —— 接管 #cv-msgs 整套聊天气泡外观 + 时间分隔节奏。
+/* IB 桌面 APP · 聊天外观 v1.3.0 —— 接管 #cv-msgs 整套聊天气泡外观 + 时间分隔节奏。
    做三件事（脚本加载即生效，不随面板开关，面板只负责调参数）：
      1) 注入一套磨砂玻璃气泡皮肤（背景 / 模糊 / 圆角 / 内距 / 最大宽度 / 字号 / 头像 / 右上角装饰点）；
      2) 接管 _tmCollapse：时间标签只在「间隔超过 N 分钟」或换人说话时才出现，不是每条都挂；
@@ -10,7 +10,7 @@
   var S={
     on:true,preset:'night',
     gap:14,padX:19,padY:13,round:28,maxw:80,fs:1.0,lh:1.78,
-    blur:26,sat:1.42,bri:0.96,bgA:0.045,lineA:0.17,txA:'#f2f6fc',
+    blur:0,sat:1.20,bri:1.0,bgA:0.075,lineA:0.17,txA:'#f2f6fc',
     dot:1,dotSize:7,ava:1,name:0,
     timeOn:1,timeGap:10
   };
@@ -51,8 +51,8 @@
   /* ── 预设 ── */
   /* 数值对齐用户给的参考图：大圆角、宽内距、字稍大、描边淡而清楚、底色几乎透明靠模糊出质感 */
   var PRESETS={
-    night:{  bgA:0.045,lineA:0.17,txA:'#f2f6fc',blur:26,sat:1.42,bri:0.96,round:28,maxw:80,fs:1.00,padX:19,padY:13,lh:1.78,dot:1,dotSize:7 },
-    ink:{    bgA:0.02,lineA:0.22,txA:'#eaf0f8',blur:16,sat:1.20,bri:0.92,round:30,maxw:78,fs:0.98,padX:20,padY:13,lh:1.80,dot:1,dotSize:7 },
+    night:{  bgA:0.075,lineA:0.17,txA:'#f2f6fc',blur:0,sat:1.20,bri:1.00,round:28,maxw:80,fs:1.00,padX:19,padY:13,lh:1.78,dot:1,dotSize:7 },
+    ink:{    bgA:0.04,lineA:0.22,txA:'#eaf0f8',blur:0,sat:1.15,bri:0.95,round:30,maxw:78,fs:0.98,padX:20,padY:13,lh:1.80,dot:1,dotSize:7 },
     day:{    bgA:0.62,lineA:0.26,txA:'#16233a',blur:18,sat:1.25,bri:1.05,round:26,maxw:82,fs:1.00,padX:19,padY:13,lh:1.76,dot:1,dotSize:6 },
     plain:{  bgA:0.01,lineA:0.10,txA:'#dfe6f2',blur:6, sat:1.05,bri:1.00,round:16,maxw:86,fs:0.96,padX:16,padY:11,lh:1.68,dot:0,dotSize:6 }
   };
@@ -94,8 +94,9 @@
       +'border:1px solid '+line+'!important;'
       +'box-shadow:'+shadow+'!important;'
       +'color:'+S.txA+'!important;'
-      +'-webkit-backdrop-filter:blur('+S.blur+'px) saturate('+S.sat+') brightness('+S.bri+');'
-      +'backdrop-filter:blur('+S.blur+'px) saturate('+S.sat+') brightness('+S.bri+')}';
+      +(S.blur>0?('-webkit-backdrop-filter:blur('+S.blur+'px) saturate('+S.sat+') brightness('+S.bri+');'
+        +'backdrop-filter:blur('+S.blur+'px) saturate('+S.sat+') brightness('+S.bri+');'):'')
+      +'}';
     /* 我的气泡：同质感、略亮一点 */
     css+='#cv-msgs .m.user{background:'+bgu+'!important;border-color:'+lineu+'!important}';
     /* 右上角装饰小圈 */
@@ -117,6 +118,9 @@
     css+='#cv-msgs .vm-stack .vmsg,#cv-msgs .vm-stack .ibvb{border-radius:'+Math.min(S.round,24)+'px!important}';
     return css;
   }
+  var _paintQ=0;
+  function paintSoon(){if(_paintQ)return;_paintQ=requestAnimationFrame(function(){_paintQ=0;try{paint()}catch(e){}})}
+
   function paint(){
     var st=document.getElementById('clab-css');
     if(!st){st=document.createElement('style');st.id='clab-css';document.head.appendChild(st)}
@@ -171,7 +175,13 @@
       if(h._clabObs)return;
       h._clabObs=1;
       var mo=new MutationObserver(function(){
-        clearTimeout(_obsT);_obsT=setTimeout(function(){runCollapse()},180);
+        clearTimeout(_obsT);_obsT=setTimeout(function(){
+          try{
+            var n=h.querySelectorAll(':scope > .mrow').length;
+            if(n===h._clabN)return;/* 行数没变（例如只是换了个 class）就不用再扫一遍 */
+            h._clabN=n;runCollapse();
+          }catch(e){}
+        },260);
       });
       mo.observe(h,{childList:true,subtree:true});
     }catch(e){}
@@ -273,7 +283,7 @@
       +'</div>'
 
       +'<div class="clab-card"><div class="clab-t">玻璃实验室</div><div class="clab-d">磨砂的质感都在这儿。</div>'
-      +slider('clab-blur','模糊',0,40,1,S.blur,function(v){return v+'px'})
+      +slider('clab-blur','模糊（越高越像玻璃，越吃性能）',0,40,1,S.blur,function(v){return v+'px'})
       +slider('clab-sat','饱和度',1,2,0.05,S.sat,function(v){return v})
       +slider('clab-bri','亮度',0.7,1.4,0.05,S.bri,function(v){return v})
       +slider('clab-bga','底色不透明度',0,0.24,0.005,S.bgA,function(v){return Number(v).toFixed(3)})
@@ -332,7 +342,7 @@
       el.addEventListener('input',function(){
         S[x[1]]=Number(el.value);
         var lab=q('#'+x[0]+'-v');if(lab)lab.textContent=x[2](Number(el.value));
-        save();paint();
+        save();paintSoon();
       });
     });
 
@@ -356,7 +366,7 @@
   })();
 
   IBApps.register({
-    id:'chatlab',name:'聊天外观',version:'1.2.0',sdk:2,wall:true,
+    id:'chatlab',name:'聊天外观',version:'1.3.0',sdk:2,wall:true,
     icon:'<path d="M4 12a8 8 0 1 1 3.2 6.4L4 20l1.3-3.4A7.9 7.9 0 0 1 4 12z"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01"/>',
     mount:async function(h,c){
       host=h;ctx=c;css();host.style.padding='0';
