@@ -13456,6 +13456,7 @@ async function saveAi(cfg,content,thinking,aiEl,ctx){/* v54-m ctx：后台完成
   if(live)pinBottom();
   try{if(window._IBCALL)window._IBCALL._onAiMsg(cfg,am)}catch(e){}/* 通话朗读（流式只补尾巴；后台消息整读） */
   try{if(window.IBApps)IBApps._emit('message',am)}catch(e){}/* v189-p：向打开中的桌面 APP 派发 TA 的新消息 */
+  try{if(window._ibAfterAiMsg)window._ibAfterAiMsg(am)}catch(e){}/* v405-p：不论有没有开着桌面 APP 都通知一次（Waifu 分泡靠这一条，_emit 只在 APP 打开时才派发） */
   return am;/* v84-m r1：把消息对象交还给工具连续调用轮（任务 1） */
 }
 
@@ -14950,6 +14951,7 @@ async function genReplyGroup(pcfg,opt){
   try{_tmCollapseAll()}catch(e){}/* v97-m 任务3 */
         try{if(window._IBCALL)window._IBCALL._onAiMsg(pcfg,am,cfg)}catch(e){}
         try{if(window.IBApps)IBApps._emit('message',am)}catch(e){}/* v323-p：向打开中的桌面 APP 派发成员的新消息 */
+        try{if(window._ibAfterAiMsg)window._ibAfterAiMsg(am)}catch(e){}/* v405-p：群聊成员回复也通知一次 */
         roundExtras.push(am);
         Promise.resolve(procMemOps(cfg,am)).catch(()=>{}).then(()=>procIbOps(cfg,am)).catch(()=>{});
       }catch(err){

@@ -1,4 +1,4 @@
-/* IB 桌面 APP · Waifu 模式 v1.4.0 —— 拟真聊天分句拆泡 + 合并发送（全局常驻）。
+/* IB 桌面 APP · Waifu 模式 v1.5.0 —— 拟真聊天分句拆泡 + 合并发送（全局常驻）。
    分泡规则（v1.4.0 重写，对齐真人聊天的节奏）：
      · 一行（换行）＝一个气泡；行内不再按空格碎切；
      · 单行超过「最长」就在句号 / 问号 / 感叹号 / 分号处贪心切块，每块不超过最长；
@@ -14,9 +14,9 @@
 (function(){
   if(!window.IBApps)return;
   var host=null,ctx=null;
-  var S={enabled:false,bindCfgId:'',mergeOn:false,mergeGap:5000,typeMs:250,stripPunct:false,minLen:10,maxLen:60,prompt:''};
+  var S={enabled:true,bindCfgId:'',mergeOn:false,mergeGap:5000,typeMs:250,stripPunct:false,minLen:2,maxLen:60,prompt:''};
   var cfgList=[];
-  var H={installed:false,origSend:null,origEmit:null,timers:[],mergeBuf:[],mergeTimer:null,lastSplit:0};
+  var H={installed:false,origSend:null,origEmit:null,origSave:null,timers:[],mergeBuf:[],mergeTimer:null,lastSplit:0};
 
   function esc(t){return String(t==null?'':t).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
   function q(sel){return host?host.querySelector(sel):null}
@@ -88,28 +88,23 @@
     var lines=raw.split(/\n+/).map(function(x){return x.trim()}).filter(function(x){return x.length>0});
     var segs=[];
     lines.forEach(function(line){
-      if(line.length<=maxLen){segs.push(line);return}
-      /* 太长：按句末标点切，再贪心拼到不超过 maxLen */
+      /* 一句一泡：先把一行按句末标点切句；只有「没有句末标点」的残句才可能并回去 */
       var parts=line.match(/[^。！？!?；;]+[。！？!?；;]*|[。！？!?；;]+/g)||[line];
-      var acc='';
       parts.forEach(function(p){
-        p=p||'';
-        if(!p)return;
-        var cand=acc+p;
-        if(!acc){acc=p}
-        else if(cand.length<=maxLen){acc=cand}
-        else{segs.push(acc);acc=p}
+        p=String(p||'').trim();if(!p)return;
+        segs.push({t:p,end:/[。！？!?；;]$/.test(p)});
       });
-      if(acc)segs.push(acc);
     });
 
-    /* 碎句并进前一个 */
+    /* 残句（没有句末标点且太短）并进前一个；整句一律独占一个气泡 */
     var out=[];
-    segs.forEach(function(s){
-      s=String(s).trim();if(!s)return;
+    segs.forEach(function(o){
+      var s=o.t;if(!s)return;
       var prev=out.length?out[out.length-1]:null;
-      if(prev!=null&&s.length<minLen&&(prev+s).length<=maxLen){out[out.length-1]=prev+s}
-      else out.push(s);
+      var tiny=!o.end&&s.replace(/[\s，,、…~～]/g,'').length<=minLen;
+      if(prev!=null&&tiny&&(prev+s).length<=maxLen){out[out.length-1]=prev+s;return}
+      if(!s.replace(/[\s，,、…~～。！？!?；;]/g,'').length)return;/* 整泡只有标点：丢掉，不生成空气泡 */
+      out.push(s);
     });
 
     if(strip)out=out.map(function(s){return s.replace(/[。！？!?，,、；;…~～\s]+$/,'').trim()}).filter(Boolean);
@@ -161,6 +156,7 @@
     if(!splittable(am))return;
     var list=splitBubbles(am.content,{strip:S.stripPunct,minLen:S.minLen,maxLen:S.maxLen});
     if(list.length<=1)return;
+    if(!list[0])return;
 
     am._wmSplit=true;
     am.content=list[0];
@@ -175,7 +171,7 @@
 
     for(var i=1;i<list.length;i++){
       (function(sent,idx){
-        var delay=Math.max(120,Math.round(S.typeMs*Math.max(1,sent.length)));
+        var delay=Math.min(1500,Math.max(160,Math.round(S.typeMs*Math.max(1,sent.length))));
         var t=setTimeout(function(){
           try{
             var ac=_refCfg(),at=_refThread();
@@ -235,6 +231,23 @@
     try{
       if(typeof sendMsg==='function'){H.origSend=sendMsg;sendMsg=mergedSend}
     }catch(e){}
+    /* v1.5.0：saveAi 是 TA 每条回复唯一必经的落库点，直接包住它——
+       IBApps._emit 只在「某个桌面 APP 正开着」时才派发，平时的聊天页根本收不到，
+       这也是分泡看着像没生效的原因。 */
+    try{
+      if(typeof saveAi==='function'&&!H.origSave){
+        H.origSave=saveAi;
+        saveAi=async function(){
+          var am=await H.origSave.apply(this,arguments);
+          try{
+            var ctx9=arguments[4];
+            var live=true;try{live=ctx9&&typeof ctx9.sameConv==='function'?!!ctx9.sameConv():true}catch(e){live=true}
+            if(live&&am)splitHook(am);
+          }catch(e){}
+          return am;
+        };
+      }
+    }catch(e){}
     try{
       if(window.IBApps&&typeof window.IBApps._emit==='function'&&!H.origEmit){
         H.origEmit=window.IBApps._emit;
@@ -243,6 +256,10 @@
           return H.origEmit.apply(this,arguments);
         };
       }
+    }catch(e){}
+    /* v1.5.0：底座在每条 TA 回复落库后无条件回调一次（不依赖桌面 APP 是否打开） */
+    try{
+      window._ibAfterAiMsg=function(am){try{if(S.enabled)splitHook(am)}catch(e){}};
     }catch(e){}
     H.installed=true;
   }
@@ -408,7 +425,7 @@
   })();
 
   IBApps.register({
-    id:'waifumode',name:'Waifu模式',version:'1.4.0',sdk:2,wall:true,
+    id:'waifumode',name:'Waifu模式',version:'1.5.0',sdk:2,wall:true,
     icon:'<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.38 8.38 0 0 1 8 8z"/><path d="M8 11h.01M12 11h.01M16 11h.01"/>',
     mount:async function(h,c){
       host=h;ctx=c;css();host.style.padding='0';host.style.overflow='hidden';
