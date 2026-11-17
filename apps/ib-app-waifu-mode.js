@@ -61,7 +61,7 @@
     try{await dbPut('apiSettings',{id:_key(),app:'waifumode',key:'cfg',v:v,updated:Date.now()})}catch(e){}
   }
   async function load(){
-    try{var v=await storageGet();if(v&&typeof v==='object')S=Object.assign(S,v)}catch(e){}
+    try{var v=await storageGet();if(v&&typeof v==='object'){S=Object.assign(S,v);if(v.mig!==15){S.enabled=true;S.mig=15;try{await storageSet(S)}catch(e){}}}}catch(e){}
     S.mergeGap=Math.min(15000,Math.max(1000,Number(S.mergeGap)||5000));
     S.typeMs=Math.min(800,Math.max(50,Number(S.typeMs)||250));
     S.minLen=Math.min(60,Math.max(0,Number(S.minLen)||0));
@@ -152,6 +152,13 @@
   /* ── 拆泡 ── */
   function splitHook(am){
     if(!S.enabled)return;
+    /* 只有「当前正开着的这段会话」才拆：别的角色 / 别的线程后台完成的回复不去动它，
+       否则首句落库、其余几句按 stillHere 判定被丢掉，等于吞词 */
+    try{
+      var ac0=_refCfg(),at0=_refThread();
+      if(ac0&&am&&am.friendId&&String(ac0.id)!==String(am.friendId))return;
+      if(at0&&am&&am.threadId&&String(at0.id)!==String(am.threadId))return;
+    }catch(e){}
     if(!matchCfg())return;
     if(!splittable(am))return;
     var list=splitBubbles(am.content,{strip:S.stripPunct,minLen:S.minLen,maxLen:S.maxLen});
