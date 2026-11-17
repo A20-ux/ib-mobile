@@ -8875,7 +8875,7 @@ var IBApps=(function(){
   
   function _load(a){
     if(!a||!a.file||a.file==='inline'||_loaded[a.id])return;/* 手机端：file:inline＝代码在主文件里 */
-    var sc=document.createElement('script');sc.src='apps/'+String(a.file).replace(/^\/+/,'');sc.defer=true;sc.dataset.ibapp=a.id;
+    var sc=document.createElement('script');sc.src='apps/'+String(a.file).replace(/^\/+/,'')+(a.version?('?v='+encodeURIComponent(String(a.version))):'');sc.defer=true;sc.dataset.ibapp=a.id;/* v1.3-p：按版本号破浏览器 / SW 缓存，改版即拉新文件 */
     sc.onerror=function(){_missing[a.id]=1;delete _loaded[a.id];try{sc.remove()}catch(e){}_storeRefresh()};
     _loaded[a.id]=sc;document.head.appendChild(sc);
   }
