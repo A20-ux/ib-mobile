@@ -1,4 +1,4 @@
-/* IB 桌面 APP · 聊天外观 v1.0.0 —— 接管 #cv-msgs 整套聊天气泡外观 + 时间分隔节奏。
+/* IB 桌面 APP · 聊天外观 v1.1.0 —— 接管 #cv-msgs 整套聊天气泡外观 + 时间分隔节奏。
    做三件事（脚本加载即生效，不随面板开关，面板只负责调参数）：
      1) 注入一套磨砂玻璃气泡皮肤（背景 / 模糊 / 圆角 / 内距 / 最大宽度 / 字号 / 头像 / 右上角装饰点）；
      2) 接管 _tmCollapse：时间标签只在「间隔超过 N 分钟」或换人说话时才出现，不是每条都挂；
@@ -9,9 +9,9 @@
   var host=null,ctx=null;
   var S={
     on:true,preset:'night',
-    gap:10,padX:16,padY:11,round:22,maxw:84,fs:0.94,lh:1.68,
-    blur:22,sat:1.35,bri:1.0,bgA:0.075,txA:'#eef2f9',
-    dot:1,ava:1,name:0,
+    gap:14,padX:19,padY:13,round:28,maxw:80,fs:1.0,lh:1.78,
+    blur:26,sat:1.42,bri:0.96,bgA:0.045,lineA:0.17,txA:'#f2f6fc',
+    dot:1,dotSize:7,ava:1,name:0,
     timeOn:1,timeGap:10
   };
   var A={installed:false,origCollapse:null};
@@ -40,7 +40,8 @@
     try{var v=await storageGet();if(v&&typeof v==='object')S=Object.assign(S,v)}catch(e){}
     S.gap=clamp(S.gap,2,20);S.padX=clamp(S.padX,10,24);S.padY=clamp(S.padY,7,18);
     S.round=clamp(S.round,4,30);S.maxw=clamp(S.maxw,70,95);S.fs=clamp(S.fs,0.8,1.12);S.lh=clamp(S.lh,1.4,1.9);
-    S.blur=clamp(S.blur,0,40);S.sat=clamp(S.sat,1,2);S.bri=clamp(S.bri,0.7,1.4);S.bgA=clamp(S.bgA,0.02,0.24);
+    S.blur=clamp(S.blur,0,40);S.sat=clamp(S.sat,1,2);S.bri=clamp(S.bri,0.7,1.4);S.bgA=clamp(S.bgA,0.0,0.24);
+    S.lineA=clamp(S.lineA,0,0.4);S.dotSize=clamp(S.dotSize,3,12);
     S.timeGap=clamp(S.timeGap,1,60);
   }
   async function save(){
@@ -48,17 +49,18 @@
   }
 
   /* ── 预设 ── */
+  /* 数值对齐用户给的参考图：大圆角、宽内距、字稍大、描边淡而清楚、底色几乎透明靠模糊出质感 */
   var PRESETS={
-    night:{  bgA:0.075,txA:'#eef2f9',blur:22,sat:1.35,bri:1.0,round:22,maxw:84,fs:0.94,padX:16,padY:11,dot:1 },
-    ink:{    bgA:0.035,txA:'#e8eef7',blur:14,sat:1.2,bri:0.95,round:26,maxw:80,fs:0.92,padX:18,padY:12,dot:1 },
-    day:{    bgA:0.62,txA:'#16233a',blur:18,sat:1.25,bri:1.05,round:20,maxw:86,fs:0.94,padX:16,padY:11,dot:1 },
-    plain:{  bgA:0.02,txA:'#dfe6f2',blur:6,sat:1.05,bri:1.0,round:14,maxw:88,fs:0.92,padX:14,padY:10,dot:0 }
+    night:{  bgA:0.045,lineA:0.17,txA:'#f2f6fc',blur:26,sat:1.42,bri:0.96,round:28,maxw:80,fs:1.00,padX:19,padY:13,lh:1.78,dot:1,dotSize:7 },
+    ink:{    bgA:0.02,lineA:0.22,txA:'#eaf0f8',blur:16,sat:1.20,bri:0.92,round:30,maxw:78,fs:0.98,padX:20,padY:13,lh:1.80,dot:1,dotSize:7 },
+    day:{    bgA:0.62,lineA:0.26,txA:'#16233a',blur:18,sat:1.25,bri:1.05,round:26,maxw:82,fs:1.00,padX:19,padY:13,lh:1.76,dot:1,dotSize:6 },
+    plain:{  bgA:0.01,lineA:0.10,txA:'#dfe6f2',blur:6, sat:1.05,bri:1.00,round:16,maxw:86,fs:0.96,padX:16,padY:11,lh:1.68,dot:0,dotSize:6 }
   };
   function applyPreset(k){
     var p=PRESETS[k];if(!p)return;
     S.preset=k;Object.keys(p).forEach(function(x){S[x]=p[x]});
     /* 松紧跟着走 */
-    if(k==='plain'){S.gap=6}else if(k==='ink'){S.gap=12}else{S.gap=10}
+    S.gap=(k==='plain'?8:(k==='night'?14:14))
     save();paint();
   }
 
@@ -71,12 +73,12 @@
     var isDay=S.preset==='day';
     var bg=isDay?('rgba(252,254,255,'+S.bgA+')'):('rgba(255,255,255,'+S.bgA+')');
     var bgu=isDay?('rgba(226,238,252,'+(S.bgA+0.10)+')'):('rgba(255,255,255,'+(S.bgA+0.05)+')');
-    var line=isDay?'rgba(120,150,190,.28)':'rgba(255,255,255,.10)';
-    var lineu=isDay?'rgba(110,145,190,.34)':'rgba(255,255,255,.14)';
+    var line=isDay?('rgba(120,150,190,'+(S.lineA+0.08).toFixed(3)+')'):('rgba(255,255,255,'+S.lineA+')');
+    var lineu=isDay?('rgba(110,145,190,'+(S.lineA+0.12).toFixed(3)+')'):('rgba(255,255,255,'+(S.lineA+0.04).toFixed(3)+')');
     var shadow=isDay
       ?'0 6px 18px rgba(30,60,110,.10), inset 0 1px 0 rgba(255,255,255,.7)'
       :'0 10px 28px rgba(0,0,0,.38), inset 0 1px 0 rgba(255,255,255,.06)';
-    var dotc=isDay?'rgba(90,130,185,.55)':'rgba(240,246,255,.42)';
+    var dotc=isDay?'rgba(90,130,185,.55)':'rgba(240,246,255,.46)';
     var css='';
     css+='#cv-msgs{gap:'+S.gap+'px}';
     css+='#cv-msgs .mrow{margin-bottom:'+Math.max(0,S.gap-7)+'px}';
@@ -93,9 +95,10 @@
     /* 我的气泡：同质感、略亮一点 */
     css+='#cv-msgs .m.user{background:'+bgu+'!important;border-color:'+lineu+'!important}';
     /* 右上角装饰小圈 */
-    css+='#cv-msgs .m.ai::after{content:"";position:absolute;top:5px;right:9px;width:6px;height:6px;border-radius:50%;border:1px solid '+dotc+';pointer-events:none;'
-      +(S.dot?'opacity:.9':'display:none')+'}';
-    css+='#cv-msgs .m.user::before{content:"";position:absolute;top:5px;left:9px;width:6px;height:6px;border-radius:50%;border:1px solid '+dotc+';pointer-events:none;'
+    var ds=S.dotSize;
+    css+='#cv-msgs .m.ai::after{content:"";position:absolute;top:7px;right:'+(S.padX-4)+'px;width:'+ds+'px;height:'+ds+'px;border-radius:50%;border:1.2px solid '+dotc+';pointer-events:none;'
+      +(S.dot?'opacity:.95':'display:none')+'}';
+    css+='#cv-msgs .m.user::before{content:"";position:absolute;top:7px;left:'+(S.padX-4)+'px;width:'+ds+'px;height:'+ds+'px;border-radius:50%;border:1.2px solid '+dotc+';pointer-events:none;'
       +(S.dot?'opacity:.55':'display:none')+'}';
     /* 圆角方向：聊天气泡常见的「靠头像那个角更小」 */
     css+='#cv-msgs .m.ai{border-top-left-radius:'+Math.max(6,S.round-12)+'px!important}';
@@ -237,7 +240,8 @@
       +slider('clab-blur','模糊',0,40,1,S.blur,function(v){return v+'px'})
       +slider('clab-sat','饱和度',1,2,0.05,S.sat,function(v){return v})
       +slider('clab-bri','亮度',0.7,1.4,0.05,S.bri,function(v){return v})
-      +slider('clab-bga','底色不透明度',0.02,0.24,0.005,S.bgA,function(v){return Number(v).toFixed(3)})
+      +slider('clab-bga','底色不透明度',0,0.24,0.005,S.bgA,function(v){return Number(v).toFixed(3)})
+      +slider('clab-linea','描边浓淡',0,0.4,0.01,S.lineA,function(v){return Number(v).toFixed(2)})
       +'</div>'
 
       +'<div class="clab-card"><div class="clab-t">文字与尺寸</div>'
@@ -252,6 +256,7 @@
 
       +'<div class="clab-card"><div class="clab-t">细节</div>'
       +'<div class="clab-row" style="margin-top:10px"><div style="flex:1"><div class="clab-t" style="font-size:0.84rem">气泡角上的小圆点</div><div class="clab-d">你图里那个装饰圈。</div></div><div class="clab-sw'+(S.dot?' on':'')+'" id="clab-dot"></div></div>'
+      +slider('clab-dotsize','小圆点大小',3,12,1,S.dotSize,function(v){return v+'px'})
       +'<div class="clab-row" style="margin-top:14px"><div style="flex:1"><div class="clab-t" style="font-size:0.84rem">显示头像</div><div class="clab-d">左侧小圆头像。</div></div><div class="clab-sw'+(S.ava?' on':'')+'" id="clab-ava"></div></div>'
       +'<div class="clab-row" style="margin-top:14px"><div style="flex:1"><div class="clab-t" style="font-size:0.84rem">显示群聊名字</div><div class="clab-d">1对1 本来就不显示。</div></div><div class="clab-sw'+(S.name?' on':'')+'" id="clab-name"></div></div>'
       +'</div>'
@@ -263,9 +268,9 @@
     Array.prototype.forEach.call(host.querySelectorAll('#clab-presets .clab-chip'),function(b){
       b.addEventListener('click',function(){applyPreset(b.getAttribute('data-p'));render()});
     });
-    q('[data-t="t1"]').addEventListener('click',function(){S.gap=5;S.padX=12;S.padY=8;S.lh=1.58;save();paint();render()});
-    q('[data-t="t2"]').addEventListener('click',function(){S.gap=10;S.padX=16;S.padY=11;S.lh=1.68;save();paint();render()});
-    q('[data-t="t3"]').addEventListener('click',function(){S.gap=16;S.padX=19;S.padY=14;S.lh=1.82;save();paint();render()});
+    q('[data-t="t1"]').addEventListener('click',function(){S.gap=8;S.padX=15;S.padY=10;S.lh=1.65;save();paint();render()});
+    q('[data-t="t2"]').addEventListener('click',function(){S.gap=14;S.padX=19;S.padY=13;S.lh=1.78;save();paint();render()});
+    q('[data-t="t3"]').addEventListener('click',function(){S.gap=20;S.padX=22;S.padY=16;S.lh=1.86;save();paint();render()});
     q('#clab-timeon').addEventListener('click',function(){S.timeOn=!S.timeOn;this.classList.toggle('on',S.timeOn);save();paint()});
     q('#clab-dot').addEventListener('click',function(){S.dot=!S.dot;this.classList.toggle('on',S.dot);save();paint()});
     q('#clab-ava').addEventListener('click',function(){S.ava=!S.ava;this.classList.toggle('on',S.ava);save();paint()});
@@ -283,6 +288,8 @@
      ['clab-bga','bgA',function(v){return Number(v).toFixed(3)}],
      ['clab-fs','fs',function(v){return Number(v).toFixed(2)+'rem'}],
      ['clab-maxw','maxw',function(v){return v+'%'}],
+     ['clab-linea','lineA',function(v){return Number(v).toFixed(2)}],
+     ['clab-dotsize','dotSize',function(v){return v+'px'}],
      ['clab-timegap','timeGap',function(v){return v+' 分钟'}]
     ].forEach(function(x){
       var el=q('#'+x[0]);if(!el)return;
@@ -311,7 +318,7 @@
   })();
 
   IBApps.register({
-    id:'chatlab',name:'聊天外观',version:'1.0.0',sdk:2,wall:true,
+    id:'chatlab',name:'聊天外观',version:'1.1.0',sdk:2,wall:true,
     icon:'<path d="M4 12a8 8 0 1 1 3.2 6.4L4 20l1.3-3.4A7.9 7.9 0 0 1 4 12z"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01"/>',
     mount:async function(h,c){
       host=h;ctx=c;css();host.style.padding='0';
